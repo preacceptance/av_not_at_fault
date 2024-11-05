@@ -13,16 +13,12 @@ source("../../common.R") # install packages; import common plotting functions
 
 ## read in data: 
 d <- read.csv('s3_replication.csv')
-
-## explore dataframe: 
-dim(d) # will provide dimensions of the dataframe by row [1] and column [2]
-colnames(d) # will provide all column names
-summary(d)
+dim(d) 
 
 ## perform attention exclusions: 
 # this will remove responses from the dataframe that failed attention checks (i.e., "1" or "2")
 d <- subset(d, (d$att1 == 2 & d$att2 == 2))
-dim(d) # number of participants should decrease after attention exclusions
+dim(d) 
 
 ## new column to label agent (av/hdv) condition
 d$cond <- ifelse(d$FL_4_DO == "FL_39", "av", "hdv") #if FL_40 -> HDV
@@ -38,7 +34,7 @@ d_clean <- subset(d_clean, !(cond == "av" & comp1 != 1)) # remove comp check 1 f
 d_clean <- subset(d_clean, !(cond == "hdv" & comp1 != "2")) # remove comp check 1 fails for hdv
 
 ## get number of participants AFTER exclusions: 
-n_final_all <- dim(d_clean)[1]
+n_final_all <- dim(d_clean)[1]; n_final_all
 percent_excl_all <- (n_orig_all - n_final_all)/n_orig_all
 n_excl_all <- n_orig_all - n_final_all
 n_final <- as.list(table(d_clean$cond))
@@ -49,26 +45,26 @@ d_clean$vB_mnfctr_liable_AV_2 <- d_clean$vB_mnfctr_liable_AV_1 # duplicate
 d_clean <- d_clean %>% relocate(vB_mnfctr_liable_AV_2, .after=vB_mnfctr_liable_AV_1) # move new column
 
 ## get mean age and gender:
-mean_age = mean(as.numeric(d$age), na.rm = TRUE) # removing NAs from the dataframe before computing mean 
-gender_f = table(d$gender)[2]/sum(table(d$gender))
+mean_age = mean(as.numeric(d$age), na.rm = TRUE); mean_age
+gender_f = table(d$gender)[2]/sum(table(d$gender)); gender_f
 
 ## ================================================================================================================
 ##                                                    SUBSETTING                 
 ## ================================================================================================================
 
 ## define new data frame to extract pre-processed data into:
-d_merged <- array(dim=c(0, 12))
+d_merged <- array(dim=c(0, 10))
 colnames(d_merged) <- c('vA_liable', 'vB_m_v_d_liable', 'vB_m_v_m_liable', 'vA_cntrfctl', 'vB_cntrfctl', 
-                        'avoid', 'comp1', 'comp2', 'pol_affil', 'driving_abil', 'age', 'cond_name')
+                        'avoid', 'comp1', 'comp2', 'age', 'cond_name')
 d_merged <- as.data.frame(d_merged, stringsAsFactors=FALSE) 
 
 ## extract only columns containing measures and other relevant info for analysis
-fixed_cols = c(49:52,56,65) # fixed columns - comp checks + mods, age, conditions
+fixed_cols = c(49:50,54,62) # fixed columns - comp checks, age, conditions
 d_merged[(dim(d_merged)[1]+1):(dim(d_merged)[1]+n_final$av), ] <- subset(d_clean, cond == "av")[c(29:34,fixed_cols)]
 d_merged[(dim(d_merged)[1]+1):(dim(d_merged)[1]+n_final$hdv), ] <- subset(d_clean, cond == "hdv")[c(43:48,fixed_cols)]
 
 # make columns numeric
-d_merged[,1:11] <- lapply(d_merged[,1:11], as.numeric)
+d_merged[,1:9] <- lapply(d_merged[,1:9], as.numeric)
 
 # cond_n where av=1, human=2
 d_merged$cond_n <- ifelse(d_merged$cond_name=="av", 1, 2)
@@ -77,7 +73,7 @@ d_merged$cond_n <- ifelse(d_merged$cond_name=="av", 1, 2)
 ##                                             DATA ANALYSIS - T-TESTS               
 ## ================================================================================================================
 
-cor(d_merged[,c(1:6,9:10)]) # check correlations between measures
+cor(d_merged[,c(1:6)]) # check correlations between measures
 
 ## Liable, at-fault (DV)
 t.test(vA_liable ~ cond_name, data = d_merged)
@@ -109,16 +105,6 @@ t.test(avoid ~ cond_name, data = d_merged)
 aggregate(avoid ~ cond_name, data = d_merged, FUN = sd)
 cohen.d(d_merged$avoid, d_merged$cond_name)
 
-# Political Affiliation (MOD)
-t.test(pol_affil ~ cond_name, data = d_merged)
-aggregate(pol_affil ~ cond_name, data = d_merged, FUN = sd)
-cohen.d(d_merged$pol_affil, d_merged$cond_name)
-
-# Perceived driving ability (MOD)
-t.test(driving_abil ~ cond_name, data = d_merged)
-aggregate(driving_abil ~ cond_name, data = d_merged, FUN = sd)
-cohen.d(d_merged$driving_abil, d_merged$cond_name)
-
 ## ================================================================================================================
 ##                                             MEDIATION ANALYSIS              
 ## ================================================================================================================
@@ -131,21 +117,11 @@ if(mediation) {
   # test age as moderator
   summary(lm(vB_m_v_m_liable ~ cond_n*age, data=d_merged))
   
-  # SERIAL MEDIATION
-  process(data = d_merged, y = "vB_m_v_m_liable", x = "cond_n", 
-          m =c("vB_cntrfctl", "avoid"), model = 6, effsize =1, total =1, stand =1, 
+  # SIMPLE MEDIATION
+  process(data = d_merged, y = "vB_m_v_m_liable", x = "cond_n",
+          m =c("vB_cntrfctl"), model = 4, effsize =1, total =1, stand =1,
           contrast =1, boot = 10000 , modelbt = 1, seed = 654321)
-  
-  # MODERATED SERIAL MEDIATION
-  # the effect of political affiliation on A path (83)
-  process(data = d_merged, y = "vB_m_v_m_liable", x = "cond_n", 
-          m =c("vB_cntrfctl", "avoid"), w = "pol_affil", model = 83, effsize =1, total =1, stand =1, 
-          contrast =1, boot = 10000 , modelbt = 1, seed = 654321)
-  # the effect of perceived driving ability on center path (91)
-  process(data = d_merged, y = "vB_m_v_m_liable", x = "cond_n", 
-          m =c("vB_cntrfctl", "avoid"), w = "driving_abil", model = 91, effsize =1, total =1, stand =1, 
-          contrast =1, boot = 10000 , modelbt = 1, seed = 654321)
-  
+
 }
 
 ## ================================================================================================================
@@ -189,7 +165,7 @@ figure1 <- ggarrange(p2_1, p2_2, p2_3, p2_4, p2_5, p2_6, nrow=2,ncol=3,common.le
 figure1 <- annotate_figure(figure1,left = text_grob("Mean Agreement", color="black", face ="plain",size=16, rot=90),
                            bottom = text_grob("Vehicle Type", color="black", face ="plain",size=16)) 
 
-png(file = "../plots/s3_plot.png", width = 2*900, height = 2*700, res = 200)  # width and height are in inches
+png(file = "../plots/s2_plot.png", width = 2*900, height = 2*700, res = 200)  # width and height are in inches
 plot(figure1)
 dev.off()
 
